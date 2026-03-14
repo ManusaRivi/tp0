@@ -12,7 +12,8 @@ def generate_compose(cantidad_clientes):
         'image': 'server:latest',
         'entrypoint': 'python3 /main.py',
         'environment': ['PYTHONUNBUFFERED=1', 'LOGGING_LEVEL=DEBUG'],
-        'networks': ['testing_net']
+        'networks': ['testing_net'],
+        'volumes': ['./server/config.ini:/config.ini']
     }
     for i in range(1, cantidad_clientes + 1):
         services[f'client{i}'] = {
@@ -21,6 +22,7 @@ def generate_compose(cantidad_clientes):
             'entrypoint': '/client',
             'environment': [f'CLI_ID={i}', 'CLI_LOG_LEVEL=DEBUG'],
             'networks': ['testing_net'],
+            'volumes': ['./client/config.yaml:/config.yaml'],
             'depends_on': ['server']
         }
     compose_content['services'] = services
