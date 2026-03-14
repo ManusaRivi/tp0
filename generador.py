@@ -1,20 +1,48 @@
 import sys
+import yaml
 
-# For now, returns the same compose.
-# TODO: generate a compose file with the specified amount of clients.
-def generate_compose(compose_base, cantidad_clientes):
-    compose_content = compose_base
-    return compose_content
+def generate_compose(cantidad_clientes):
+    compose_content = {}
+    compose_content['name'] = 'tp0'
+    
+    services = {}
+
+    services['server'] = {
+        'container_name': 'server',
+        'image': 'server:latest',
+        'entrypoint': 'python3 /main.py',
+        'environment': ['PYTHONUNBUFFERED=1', 'LOGGING_LEVEL=DEBUG'],
+        'networks': ['testing_net']
+    }
+    for i in range(1, cantidad_clientes + 1):
+        services[f'client{i}'] = {
+            'container_name': f'client{i}',
+            'image': 'client:latest',
+            'entrypoint': '/client',
+            'environment': [f'CLI_ID={i}', 'CLI_LOG_LEVEL=DEBUG'],
+            'networks': ['testing_net'],
+            'depends_on': ['server']
+        }
+    compose_content['services'] = services
+
+    compose_content['networks'] = {
+        'testing_net': {
+            'ipam': {
+                'driver': 'default',
+                'config': [
+                    {'subnet': '172.25.125.0/24'}
+                ]
+            }
+        }
+    }
+    yaml.dump(compose_content, sys.stdout)
 
 def main():
-    if len(sys.argv) != 3:
-        print("Uso: python3 generar_compose.py <compose_base> <client_amount>")
+    if len(sys.argv) != 2:
         sys.exit(1)
 
-    base_compose = sys.argv[1]
-    client_amount = int(sys.argv[2])
+    client_amount = int(sys.argv[1])
 
-    compose_content = generate_compose(base_compose, client_amount)
-    print(compose_content)
+    generate_compose(client_amount)
 
 main()
