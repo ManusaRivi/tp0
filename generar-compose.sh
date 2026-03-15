@@ -5,7 +5,7 @@ if [ "$#" -ne 2 ]; then
     exit 1
 fi
 
-if ! [[ "$2" =~ ^[1-9]+$ ]]; then
+if ! [[ "$2" =~ ^[0-9]+$ ]]; then
     echo "Client amount must be a positive integer."
     exit 1
 fi
