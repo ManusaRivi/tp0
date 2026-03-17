@@ -2,6 +2,7 @@
 
 from configparser import ConfigParser
 from common.server import Server
+from common.shutdown import ShutdownHandler
 import logging
 import os
 
@@ -49,6 +50,7 @@ def main():
 
     # Initialize server and start server loop
     server = Server(port, listen_backlog)
+    _shutdown_handler = ShutdownHandler(server)
     server.run()
 
 def initialize_log(logging_level):
