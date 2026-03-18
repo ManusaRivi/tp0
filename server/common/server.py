@@ -1,6 +1,7 @@
 import socket
 import logging
-
+from server.network import protocol
+from server.network.socket import Socket
 
 class Server:
     def __init__(self, port, listen_backlog):
@@ -19,35 +20,35 @@ class Server:
         finishes, servers starts to accept new connections again
         """
 
-        # TODO: Modify this program to handle signal to graceful shutdown
-        # the server
         while not self.stopped:
             client_sock = self.__accept_new_connection()
             if not self.stopped or client_sock is not None:
                 self.__handle_client_connection(client_sock)
     
     def stop(self):
-        # Break server loop, close socket so __accept_new_connection is unblocked
+        """
+        Break server loop, close socket so __accept_new_connection is unblocked
+        """
+
         self.stopped = True
         self._server_socket.close()
         logging.info("action: shutdown_server | result: success")
 
-    def __handle_client_connection(self, client_sock):
+    def __handle_client_connection(self, client_sock: Socket):
         """
         Read message from a specific client socket and closes the socket
 
         If a problem arises in the communication with the client, the
         client socket will also be closed
         """
+
         try:
-            # TODO: Modify the receive to avoid short-reads
-            msg = client_sock.recv(1024).rstrip().decode('utf-8')
-            addr = client_sock.getpeername()
-            logging.info(f'action: receive_message | result: success | ip: {addr[0]} | msg: {msg}')
-            # TODO: Modify the send to avoid short-writes
-            client_sock.send("{}\n".format(msg).encode('utf-8'))
+            bet = protocol.receive_bet(client_sock)
+            # TODO: Store bet. For now, we just log it
+            logging.info(f'action: apuesta_almacenada | result: success | dni: ${bet['dni_number']} | numero: ${bet['bet_amount']}')
+            protocol.send_bet_result(client_sock, protocol.ServerMessageStatus.SUCCESS)
         except OSError as e:
-            logging.error("action: receive_message | result: fail | error: {e}")
+            logging.error("action: apuesta_almacenada | result: fail | error: {e}")
         finally:
             client_sock.close()
 
@@ -64,9 +65,9 @@ class Server:
             logging.info('action: accept_connections | result: in_progress')
             c, addr = self._server_socket.accept()
             logging.info(f'action: accept_connections | result: success | ip: {addr[0]}')
-            return c
+            return Socket(c)
         except OSError as e:
-            # Bad file descriptor
+            # Bad file descriptor. This means this socket was closed to stop the server
             if e.errno == 9:
                 logging.info("action: end_connections | result: success")
             else:
