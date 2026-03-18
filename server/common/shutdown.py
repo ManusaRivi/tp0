@@ -7,7 +7,7 @@ class ShutdownHandler:
         signal.signal(signal.SIGTERM, self.exit_gracefully)
         signal.signal(signal.SIGINT, self.exit_gracefully)
 
-    def exit_gracefully(self):
-        logging.info("action: shutdown_signal_received | result: success")
+    def exit_gracefully(self, signum, frame):
+        logging.info("action: exit | result: success")
         self._server.stop()
 
