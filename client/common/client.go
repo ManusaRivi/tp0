@@ -1,11 +1,10 @@
 package common
 
 import (
-	"bufio"
-	"fmt"
 	"net"
 	"time"
 
+	"github.com/7574-sistemas-distribuidos/docker-compose-init/client/network"
 	"github.com/op/go-logging"
 )
 
@@ -22,7 +21,7 @@ type ClientConfig struct {
 // Client Entity that encapsulates how
 type Client struct {
 	config ClientConfig
-	conn   net.Conn
+	skt    *network.Socket
 }
 
 // NewClient Initializes a new client receiving the configuration
@@ -47,7 +46,7 @@ func (c *Client) createClientSocket() error {
 		)
 		return err
 	}
-	c.conn = conn
+	c.skt = network.NewSocket(conn)
 	return nil
 }
 
@@ -63,15 +62,26 @@ func (c *Client) StartClientLoop() {
 			return
 		}
 
-		// TODO: Modify the send to avoid short-write
-		fmt.Fprintf(
-			c.conn,
-			"[CLIENT %v] Message N°%v\n",
-			c.config.ID,
-			msgID,
-		)
-		msg, err := bufio.NewReader(c.conn).ReadString('\n')
-		c.conn.Close()
+		err = network.SendBetMessage(c.skt, "John", "Doe", 12345678, 1990, 1, 1, 100)
+
+		if err != nil {
+			log.Errorf("action: apuesta_enviada | result: fail | dni: 12345678 | numero: 100",
+				c.config.ID,
+				err,
+			)
+			c.skt.Close()
+			return
+		}
+
+		status, err := network.ReceiveServerMessage(c.skt)
+
+		switch status {
+		case network.ServerMessageStatusFailure:
+			log.Infof("action: apuesta_enviada | result: fail | dni: 12345678 | numero: 100")
+		case network.ServerMessageStatusSuccess:
+			log.Infof("action: apuesta_enviada | result: success | dni: 12345678 | numero: 100")
+		}
+		c.skt.Close()
 
 		if err != nil {
 			log.Errorf("action: receive_message | result: fail | client_id: %v | error: %v",
@@ -80,11 +90,6 @@ func (c *Client) StartClientLoop() {
 			)
 			return
 		}
-
-		log.Infof("action: receive_message | result: success | client_id: %v | msg: %v",
-			c.config.ID,
-			msg,
-		)
 
 		// Wait a time between sending one message and the next one
 		time.Sleep(c.config.LoopPeriod)
@@ -95,7 +100,7 @@ func (c *Client) StartClientLoop() {
 
 // Close Closes the client connection.
 func (c *Client) Close() {
-	if c.conn != nil {
-		c.conn.Close()
+	if c.skt != nil {
+		c.skt.Close()
 	}
 }
