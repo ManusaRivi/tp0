@@ -7,13 +7,9 @@ import "encoding/binary"
 // =====================
 
 const (
-	FirstNameSizeFieldSize uint8 = 1
-	LastNameSizeFieldSize  uint8 = 1
-	DNIFieldSize           uint8 = 4
-	BirthYearFieldSize     uint8 = 2
-	BirthMonthFieldSize    uint8 = 1
-	BirthDayFieldSize      uint8 = 1
-	BetAmountFieldSize     uint8 = 4
+	DNIFieldSize       uint8 = 4
+	BirthYearFieldSize uint8 = 2
+	BetAmountFieldSize uint8 = 4
 )
 
 const (
