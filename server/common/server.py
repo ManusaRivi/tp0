@@ -1,7 +1,7 @@
 import socket
 import logging
-from server.network import protocol
-from server.network.socket import Socket
+from network import protocol
+from network.socket import Socket
 
 class Server:
     def __init__(self, port, listen_backlog):
@@ -45,7 +45,7 @@ class Server:
         try:
             bet = protocol.receive_bet(client_sock)
             # TODO: Store bet. For now, we just log it
-            logging.info(f'action: apuesta_almacenada | result: success | dni: ${bet['dni_number']} | numero: ${bet['bet_amount']}')
+            logging.info(f"action: apuesta_almacenada | result: success | dni: {bet['dni']} | numero: {bet['bet_amount']}")
             protocol.send_bet_result(client_sock, protocol.ServerMessageStatus.SUCCESS)
         except OSError as e:
             logging.error("action: apuesta_almacenada | result: fail | error: {e}")

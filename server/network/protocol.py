@@ -1,6 +1,6 @@
 from enum import IntEnum
 
-from server.network.socket import Socket
+from network.socket import Socket
 
 # =====================
 #  Protocol Constants
