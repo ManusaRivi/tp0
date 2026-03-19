@@ -105,11 +105,23 @@ func main() {
 	// Print program config with debugging purposes
 	PrintConfig(v)
 
+	agency_data, err := common.GetAgencyData()
+
+	common.PrintAgencyData(agency_data)
+
+	if err != nil {
+		log.Criticalf("action: get_agency_data | result: fail | error: %v",
+			err,
+		)
+		os.Exit(1)
+	}
+
 	clientConfig := common.ClientConfig{
 		ServerAddress: v.GetString("server.address"),
 		ID:            v.GetString("id"),
 		LoopAmount:    v.GetInt("loop.amount"),
 		LoopPeriod:    v.GetDuration("loop.period"),
+		AgencyData:    agency_data,
 	}
 
 	signalChannel := make(chan os.Signal, 1)
