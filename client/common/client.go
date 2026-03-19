@@ -63,6 +63,8 @@ func (c *Client) createClientSocket() error {
 
 // StartClientLoop Send messages to the client until some time threshold is met
 func (c *Client) StartClientLoop() {
+	agencyData := c.config.AgencyData
+
 	// There is an autoincremental msgID to identify every message sent
 	// Messages if the message amount threshold has not been surpassed
 	for msgID := 1; msgID <= c.config.LoopAmount; msgID++ {
@@ -75,19 +77,19 @@ func (c *Client) StartClientLoop() {
 
 		err = network.SendBetMessage(
 			c.skt,
-			c.config.AgencyData.FirstName,
-			c.config.AgencyData.LastName,
-			c.config.AgencyData.DNI,
-			c.config.AgencyData.BirthYear,
-			c.config.AgencyData.BirthMonth,
-			c.config.AgencyData.BirthDay,
-			c.config.AgencyData.Number,
+			agencyData.FirstName,
+			agencyData.LastName,
+			agencyData.DNI,
+			agencyData.BirthYear,
+			agencyData.BirthMonth,
+			agencyData.BirthDay,
+			agencyData.Number,
 		)
 
 		if err != nil {
-			log.Errorf("action: apuesta_enviada | result: fail | dni: %v | numero: %v | error: $v",
-				c.config.AgencyData.DNI,
-				c.config.AgencyData.Number,
+			log.Errorf("action: apuesta_enviada | result: fail | dni: %v | numero: %v | error: %v",
+				agencyData.DNI,
+				agencyData.Number,
 				err,
 			)
 			c.skt.Close()
@@ -99,13 +101,19 @@ func (c *Client) StartClientLoop() {
 		switch status {
 		case network.ServerMessageStatusFailure:
 			log.Infof("action: apuesta_enviada | result: fail | dni: %v | numero: %v",
-				c.config.AgencyData.DNI,
-				c.config.AgencyData.Number,
+				agencyData.DNI,
+				agencyData.Number,
 			)
 		case network.ServerMessageStatusSuccess:
 			log.Infof("action: apuesta_enviada | result: success | dni: %v | numero: %v",
-				c.config.AgencyData.DNI,
-				c.config.AgencyData.Number,
+				agencyData.DNI,
+				agencyData.Number,
+			)
+		default:
+			log.Warningf("action: apuesta_enviada | result: unknown | dni: %v | numero: %v | status: %v",
+				agencyData.DNI,
+				agencyData.Number,
+				status,
 			)
 		}
 		c.skt.Close()
