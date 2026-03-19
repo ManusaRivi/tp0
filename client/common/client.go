@@ -10,12 +10,23 @@ import (
 
 var log = logging.MustGetLogger("log")
 
+type AgencyData struct {
+	FirstName  string
+	LastName   string
+	DNI        uint32
+	BirthYear  uint16
+	BirthMonth uint8
+	BirthDay   uint8
+	Number     uint32
+}
+
 // ClientConfig Configuration used by the client
 type ClientConfig struct {
 	ID            string
 	ServerAddress string
 	LoopAmount    int
 	LoopPeriod    time.Duration
+	AgencyData    AgencyData
 }
 
 // Client Entity that encapsulates how
@@ -62,11 +73,21 @@ func (c *Client) StartClientLoop() {
 			return
 		}
 
-		err = network.SendBetMessage(c.skt, "John", "Doe", 12345678, 1990, 1, 1, 100)
+		err = network.SendBetMessage(
+			c.skt,
+			c.config.AgencyData.FirstName,
+			c.config.AgencyData.LastName,
+			c.config.AgencyData.DNI,
+			c.config.AgencyData.BirthYear,
+			c.config.AgencyData.BirthMonth,
+			c.config.AgencyData.BirthDay,
+			c.config.AgencyData.Number,
+		)
 
 		if err != nil {
-			log.Errorf("action: apuesta_enviada | result: fail | dni: 12345678 | numero: 100",
-				c.config.ID,
+			log.Errorf("action: apuesta_enviada | result: fail | dni: %v | numero: %v | error: $v",
+				c.config.AgencyData.DNI,
+				c.config.AgencyData.Number,
 				err,
 			)
 			c.skt.Close()
@@ -77,9 +98,15 @@ func (c *Client) StartClientLoop() {
 
 		switch status {
 		case network.ServerMessageStatusFailure:
-			log.Infof("action: apuesta_enviada | result: fail | dni: 12345678 | numero: 100")
+			log.Infof("action: apuesta_enviada | result: fail | dni: %v | numero: %v",
+				c.config.AgencyData.DNI,
+				c.config.AgencyData.Number,
+			)
 		case network.ServerMessageStatusSuccess:
-			log.Infof("action: apuesta_enviada | result: success | dni: 12345678 | numero: 100")
+			log.Infof("action: apuesta_enviada | result: success | dni: %v | numero: %v",
+				c.config.AgencyData.DNI,
+				c.config.AgencyData.Number,
+			)
 		}
 		c.skt.Close()
 
