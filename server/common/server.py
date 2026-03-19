@@ -50,7 +50,7 @@ class Server:
                 first_name=bet['first_name'],
                 last_name=bet['last_name'],
                 document=str(bet['dni']),
-                birthdate=f"{bet['birth_year']}-{bet['birth_month']}-{bet['birth_day']}",
+                birthdate=bet['birthdate'],
                 number=bet['bet_amount'],
             )])
             logging.info(f"action: apuesta_almacenada | result: success | dni: {bet['dni']} | numero: {bet['bet_amount']}")
