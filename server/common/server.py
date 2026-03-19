@@ -2,6 +2,7 @@ import socket
 import logging
 from network import protocol
 from network.socket import Socket
+from common import utils
 
 class Server:
     def __init__(self, port, listen_backlog):
@@ -44,7 +45,14 @@ class Server:
 
         try:
             bet = protocol.receive_bet(client_sock)
-            # TODO: Store bet. For now, we just log it
+            utils.store_bets([utils.Bet(
+                agency=0,  # TODO: Get agency from client
+                first_name=bet['first_name'],
+                last_name=bet['last_name'],
+                document=str(bet['dni']),
+                birthdate=f"{bet['birth_year']}-{bet['birth_month']}-{bet['birth_day']}",
+                number=bet['bet_amount'],
+            )])
             logging.info(f"action: apuesta_almacenada | result: success | dni: {bet['dni']} | numero: {bet['bet_amount']}")
             protocol.send_bet_result(client_sock, protocol.ServerMessageStatus.SUCCESS)
         except OSError as e:
