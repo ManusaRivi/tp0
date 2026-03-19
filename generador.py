@@ -23,7 +23,8 @@ def generate_compose(cantidad_clientes):
             'environment': [f'CLI_ID={i}'],
             'networks': ['testing_net'],
             'volumes': ['./client/config.yaml:/config.yaml'],
-            'depends_on': ['server']
+            'depends_on': ['server'],
+            'env_file': [f'./agencies/{i}.env']
         }
     compose_content['services'] = services
 
