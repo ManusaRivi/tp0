@@ -1,9 +1,11 @@
 package common
 
 import (
-	"os"
+	"fmt"
 	"strconv"
 	"time"
+
+	"github.com/spf13/viper"
 )
 
 func parseBirthdate(birthdate string) (uint16, uint8, uint8, error) {
@@ -28,51 +30,41 @@ func PrintAgencyData(agencyData AgencyData) {
 	)
 }
 
-func GetAgencyData() (AgencyData, error) {
-	first_name := os.Getenv("NOMBRE")
+func GetAgencyData(v *viper.Viper) (AgencyData, error) {
+	firstName := v.GetString("agency.first_name")
+	lastName := v.GetString("agency.last_name")
+	dni := v.GetString("agency.dni")
 
-	last_name := os.Getenv("APELLIDO")
-
-	dni := os.Getenv("DNI")
-	dni_int, err := strconv.ParseUint(dni, 10, 32)
+	dniInt, err := strconv.ParseUint(dni, 10, 32)
 	if err != nil {
-		return AgencyData{}, err
+		return AgencyData{}, fmt.Errorf("invalid DNI value %q: %w", dni, err)
 	}
 
-	dni_int32 := uint32(dni_int)
+	dniUint32 := uint32(dniInt)
 
-	birthdate := os.Getenv("NACIMIENTO")
+	birthdate := v.GetString("agency.birthdate")
 
 	year, month, day, err := parseBirthdate(birthdate)
 	if err != nil {
-		log.Criticalf("action: parse_birthdate | result: fail | error: %v",
-			err,
-		)
-		return AgencyData{}, err
+		return AgencyData{}, fmt.Errorf("invalid NACIMIENTO value %q (expected YYYY-MM-DD): %w", birthdate, err)
 	}
 
-	birth_year := uint16(year)
-	birth_month := uint8(month)
-	birth_day := uint8(day)
+	number := v.GetString("agency.number")
 
-	number := os.Getenv("NUMERO")
-	number_int, err := strconv.ParseUint(number, 10, 32)
+	numberInt, err := strconv.ParseUint(number, 10, 32)
 	if err != nil {
-		log.Criticalf("action: parse_number | result: fail | error: %v",
-			err,
-		)
-		return AgencyData{}, err
+		return AgencyData{}, fmt.Errorf("invalid NUMERO value %q: %w", number, err)
 	}
 
-	number_int32 := uint32(number_int)
+	numberUint32 := uint32(numberInt)
 
 	return AgencyData{
-		FirstName:  first_name,
-		LastName:   last_name,
-		DNI:        dni_int32,
-		BirthYear:  birth_year,
-		BirthMonth: birth_month,
-		BirthDay:   birth_day,
-		Number:     number_int32,
+		FirstName:  firstName,
+		LastName:   lastName,
+		DNI:        dniUint32,
+		BirthYear:  year,
+		BirthMonth: month,
+		BirthDay:   day,
+		Number:     numberUint32,
 	}, nil
 }

@@ -40,6 +40,12 @@ func InitConfig() (*viper.Viper, error) {
 	v.BindEnv("loop", "amount")
 	v.BindEnv("log", "level")
 
+	v.BindEnv("agency.first_name", "NOMBRE")
+	v.BindEnv("agency.last_name", "APELLIDO")
+	v.BindEnv("agency.dni", "DNI")
+	v.BindEnv("agency.birthdate", "NACIMIENTO")
+	v.BindEnv("agency.number", "NUMERO")
+
 	// Try to read configuration from config file. If config file
 	// does not exists then ReadInConfig will fail but configuration
 	// can be loaded from the environment variables so we shouldn't
@@ -105,9 +111,7 @@ func main() {
 	// Print program config with debugging purposes
 	PrintConfig(v)
 
-	agency_data, err := common.GetAgencyData()
-
-	common.PrintAgencyData(agency_data)
+	agencyData, err := common.GetAgencyData(v)
 
 	if err != nil {
 		log.Criticalf("action: get_agency_data | result: fail | error: %v",
@@ -116,12 +120,14 @@ func main() {
 		os.Exit(1)
 	}
 
+	common.PrintAgencyData(agencyData)
+
 	clientConfig := common.ClientConfig{
 		ServerAddress: v.GetString("server.address"),
 		ID:            v.GetString("id"),
 		LoopAmount:    v.GetInt("loop.amount"),
 		LoopPeriod:    v.GetDuration("loop.period"),
-		AgencyData:    agency_data,
+		AgencyData:    agencyData,
 	}
 
 	signalChannel := make(chan os.Signal, 1)
