@@ -19,7 +19,7 @@ func parseBirthdate(birthdate string) (uint16, uint8, uint8, error) {
 }
 
 func PrintAgencyData(agencyData AgencyData) {
-	log.Infof("action: agency_data | first_name: %s, last_name: %s, dni: %v, birth_year: %v, birth_month: %v, birth_day: %v, number: %v",
+	log.Debugf("action: agency_data | result: success | first_name: %s, last_name: %s, dni: %v, birth_year: %v, birth_month: %v, birth_day: %v, number: %v",
 		agencyData.FirstName,
 		agencyData.LastName,
 		agencyData.DNI,

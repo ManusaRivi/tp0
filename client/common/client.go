@@ -110,7 +110,7 @@ func (c *Client) StartClientLoop() {
 				agencyData.Number,
 			)
 		default:
-			log.Warningf("action: apuesta_enviada | result: unknown | dni: %v | numero: %v | status: %v",
+			log.Warningf("action: apuesta_enviada | result: fail | dni: %v | numero: %v | status: %v",
 				agencyData.DNI,
 				agencyData.Number,
 				status,
