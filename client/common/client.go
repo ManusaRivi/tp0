@@ -2,6 +2,7 @@ package common
 
 import (
 	"net"
+	"strconv"
 	"time"
 
 	"github.com/7574-sistemas-distribuidos/docker-compose-init/client/network"
@@ -65,6 +66,15 @@ func (c *Client) createClientSocket() error {
 func (c *Client) StartClientLoop() {
 	agencyData := c.config.AgencyData
 
+	agencyID, err := strconv.ParseUint(c.config.ID, 10, 8)
+	if err != nil {
+		log.Errorf("action: parse_client_id | result: fail | client_id: %v | error: %v",
+			c.config.ID,
+			err,
+		)
+		return
+	}
+
 	// There is an autoincremental msgID to identify every message sent
 	// Messages if the message amount threshold has not been surpassed
 	for msgID := 1; msgID <= c.config.LoopAmount; msgID++ {
@@ -77,6 +87,7 @@ func (c *Client) StartClientLoop() {
 
 		err = network.SendBetMessage(
 			c.skt,
+			uint8(agencyID),
 			agencyData.FirstName,
 			agencyData.LastName,
 			agencyData.DNI,
