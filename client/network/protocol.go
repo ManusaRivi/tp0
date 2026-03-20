@@ -2,6 +2,27 @@ package network
 
 import "encoding/binary"
 
+/*
+
+Protocol definition:
+- Client sends Bet message to Server
+- Server responds with a Result (Sucess of Failure)
+
+Data serialization:
+- Agency id: 1 byte
+- First name & Last name: 1 byte for the size of the field + N bytes for the content (max 255 bytes for the content)
+- DNI: 4 bytes (uint32)
+- Birthdate: broken down into three separate fields to minimize bytes sent.
+- Birth year: 2 bytes (uint16)
+- Birth month: 1 byte (uint8)
+- Birth day: 1 byte (uint8)
+- Bet amount: 4 bytes (uint32)
+
+Server response:
+- Status: 1 byte (0 for failure, 1 for success)
+
+*/
+
 // =====================
 //  Protocol Constants
 // =====================
@@ -24,6 +45,7 @@ const (
 
 func SendBetMessage(
 	socket *Socket,
+	id uint8,
 	firstName string,
 	lastName string,
 	dni uint32,
@@ -32,6 +54,10 @@ func SendBetMessage(
 	birthDay uint8,
 	betAmount uint32,
 ) error {
+	if err := socket.Send_all([]byte{id}); err != nil {
+		return err
+	}
+
 	firstNameSize := byte(len(firstName))
 	lastNameSize := byte(len(lastName))
 
