@@ -46,7 +46,7 @@ class Server:
         try:
             bet = protocol.receive_bet(client_sock)
             utils.store_bets([utils.Bet(
-                agency=0,  # TODO: Get agency from client
+                agency=bet['id'],
                 first_name=bet['first_name'],
                 last_name=bet['last_name'],
                 document=str(bet['dni']),
