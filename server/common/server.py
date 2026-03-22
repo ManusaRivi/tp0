@@ -44,19 +44,21 @@ class Server:
         """
 
         try:
-            bet = protocol.receive_bet(client_sock)
+            bets = protocol.receive_bet_batch(client_sock)
             utils.store_bets([utils.Bet(
                 agency=bet['id'],
                 first_name=bet['first_name'],
                 last_name=bet['last_name'],
                 document=str(bet['dni']),
                 birthdate=bet['birthdate'],
-                number=bet['bet_amount'],
-            )])
-            logging.info(f"action: apuesta_almacenada | result: success | dni: {bet['dni']} | numero: {bet['bet_amount']}")
+                number=str(bet['number']))
+                for bet in bets
+            ])
+            logging.info(f"action: apuesta_recibida | result: success | cantidad: {len(bets)}")
             protocol.send_bet_result(client_sock, protocol.ServerMessageStatus.SUCCESS)
         except OSError as e:
-            logging.error("action: apuesta_almacenada | result: fail | error: {e}")
+            logging.error(f"action: apuesta_recibida | result: fail | cantidad: {len(bets)}")
+            protocol.send_bet_result(client_sock, protocol.ServerMessageStatus.FAILURE)
         finally:
             client_sock.close()
 
