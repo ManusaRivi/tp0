@@ -22,7 +22,7 @@ def generate_compose(cantidad_clientes):
             'entrypoint': '/client',
             'environment': [f'CLI_ID={i}'],
             'networks': ['testing_net'],
-            'volumes': ['./client/config.yaml:/config.yaml'],
+            'volumes': ['./client/config.yaml:/config.yaml', f'./.data/agency-{i}.csv:/agency.csv'],
             'depends_on': ['server'],
             'env_file': [f'./agencies/{i}.env']
         }
