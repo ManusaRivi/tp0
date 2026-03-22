@@ -101,12 +101,20 @@ func (c *Client) StartClientLoop() {
 			bets,
 		)
 
-		if err != nil || !sentBatch {
+		if err != nil {
 			log.Errorf("action: apuesta_enviada | result: fail | error: %v",
 				err,
 			)
 			c.skt.Close()
 			return
+		}
+
+		// If batch was not sent (maybe all bets were invalid, failed to parse) we close the connection,
+		// advance the batch and continue with the next loop iteration, without waiting for a server response.
+		if !sentBatch {
+			c.skt.Close()
+			c.repository.AdvanceBatch(betsProcessed)
+			continue
 		}
 
 		status, err := network.ReceiveServerMessage(c.skt)
