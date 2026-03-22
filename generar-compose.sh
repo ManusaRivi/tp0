@@ -13,4 +13,6 @@ fi
 echo "Compose file: $1"
 echo "Amount of clients: $2"
 
+pip install pyyaml
+
 python3 generador.py $2 > $1
