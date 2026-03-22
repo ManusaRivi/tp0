@@ -16,7 +16,7 @@ Data serialization:
 - Birth year: 2 bytes (uint16)
 - Birth month: 1 byte (uint8)
 - Birth day: 1 byte (uint8)
-- Bet amount: 4 bytes (uint32)
+- Bet number: 4 bytes (uint32)
 
 Server response:
 - Status: 1 byte (0 for failure, 1 for success)
@@ -27,6 +27,8 @@ Server response:
 #  Protocol Constants
 # =====================
 
+BATCH_SIZE_BYTES = 2
+
 class ClientMessageFieldSize(IntEnum):
     NAME_LENGTH = 1
     ID = 1
@@ -34,7 +36,7 @@ class ClientMessageFieldSize(IntEnum):
     BIRTH_YEAR = 2
     BIRTH_MONTH = 1
     BIRTH_DAY = 1
-    BET_AMOUNT = 4
+    BET_NUMBER = 4
 
 
 class ServerMessageStatus(IntEnum):
@@ -47,7 +49,7 @@ class ServerMessageStatus(IntEnum):
 # =====================
 
 
-def send_bet_result(client_sock, status: ServerMessageStatus):
+def send_bet_result(client_sock, status: ServerMessageStatus) -> None:
     client_sock.send(status.value.to_bytes(1, byteorder='big'))
 
 
@@ -67,7 +69,67 @@ def recv_with_prefix(client_sock: Socket, field_name: str) -> str:
         return text_without_padding.decode('utf-8')
     except UnicodeDecodeError as error:
         raise ValueError(f'Invalid UTF-8 encoding for {field_name}') from error
-	
+
+
+def parse_bet(id: int, bet_data: bytes) -> tuple[dict, int]:
+    offset = 0
+
+    first_name_length = int.from_bytes(bet_data[offset:offset + ClientMessageFieldSize.NAME_LENGTH], byteorder='big')
+    offset += ClientMessageFieldSize.NAME_LENGTH
+    first_name = bet_data[offset:offset + first_name_length].decode('utf-8')
+    offset += first_name_length
+
+    last_name_length = int.from_bytes(bet_data[offset:offset + ClientMessageFieldSize.NAME_LENGTH], byteorder='big')
+    offset += ClientMessageFieldSize.NAME_LENGTH
+    last_name = bet_data[offset:offset + last_name_length].decode('utf-8')
+    offset += last_name_length
+
+    dni_number = int.from_bytes(bet_data[offset:offset + ClientMessageFieldSize.DNI], byteorder='big')
+    offset += ClientMessageFieldSize.DNI
+
+    birth_year = int.from_bytes(bet_data[offset:offset + ClientMessageFieldSize.BIRTH_YEAR], byteorder='big')
+    offset += ClientMessageFieldSize.BIRTH_YEAR
+
+    birth_month = int.from_bytes(bet_data[offset:offset + ClientMessageFieldSize.BIRTH_MONTH], byteorder='big')
+    offset += ClientMessageFieldSize.BIRTH_MONTH
+
+    birth_day = int.from_bytes(bet_data[offset:offset + ClientMessageFieldSize.BIRTH_DAY], byteorder='big')
+    offset += ClientMessageFieldSize.BIRTH_DAY
+
+    bet_number = int.from_bytes(bet_data[offset:offset + ClientMessageFieldSize.BET_NUMBER], byteorder='big')
+    offset += ClientMessageFieldSize.BET_NUMBER
+
+    return {
+        "id": id, 
+        "first_name": first_name,
+        "last_name": last_name,
+        "dni": dni_number,
+        "birthdate": f'{birth_year:04d}-{birth_month:02d}-{birth_day:02d}',
+        "number": bet_number
+    }, offset
+
+
+def parse_batch(id: int, batch_bytes: bytes) -> list[dict]:
+    bets = []
+    offset = 0
+    while offset < len(batch_bytes):
+        bet_data = batch_bytes[offset:]
+        bet, bytes_read = parse_bet(id, bet_data)
+        bets.append(bet)
+        offset += bytes_read
+    return bets
+
+def receive_bet_batch(client_sock: Socket) -> list[dict]:
+    try:
+        id = int.from_bytes(client_sock.recv_all(ClientMessageFieldSize.ID), byteorder='big')
+        batch_size = int.from_bytes(client_sock.recv_all(BATCH_SIZE_BYTES), byteorder='big')
+
+        batch_bytes = client_sock.recv_all(batch_size)
+
+        return parse_batch(id, batch_bytes)
+    except Exception as e:
+        raise ValueError(f'Error receiving bet chunk: {e}') from e
+
 
 def receive_bet(client_sock: Socket):
     id = int.from_bytes(client_sock.recv_all(ClientMessageFieldSize.ID), byteorder='big')
@@ -77,7 +139,7 @@ def receive_bet(client_sock: Socket):
     birth_year = int.from_bytes(client_sock.recv_all(ClientMessageFieldSize.BIRTH_YEAR), byteorder='big')
     birth_month = int.from_bytes(client_sock.recv_all(ClientMessageFieldSize.BIRTH_MONTH), byteorder='big')
     birth_day = int.from_bytes(client_sock.recv_all(ClientMessageFieldSize.BIRTH_DAY), byteorder='big')
-    bet_amount = int.from_bytes(client_sock.recv_all(ClientMessageFieldSize.BET_AMOUNT), byteorder='big')
+    bet_number = int.from_bytes(client_sock.recv_all(ClientMessageFieldSize.BET_NUMBER), byteorder='big')
 
     return {
         "id": id, 
@@ -85,5 +147,5 @@ def receive_bet(client_sock: Socket):
         "last_name": last_name,
         "dni": dni_number,
         "birthdate": f'{birth_year:04d}-{birth_month:02d}-{birth_day:02d}',
-        "bet_amount": bet_amount
+        "number": bet_number
     }
