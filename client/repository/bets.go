@@ -83,3 +83,7 @@ func (r *Repository) FetchBets(batchSize int) ([]Bet, error) {
 
 	return bets, nil
 }
+
+func (r *Repository) AdvanceBatch(betsProcessed int) {
+	
+}

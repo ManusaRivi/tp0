@@ -93,7 +93,7 @@ func (c *Client) StartClientLoop() {
 			len(bets),
 		)
 
-		err = network.SendBetBatch(
+		betsProcessed, err := network.SendBetBatch(
 			c.skt,
 			uint8(agencyID),
 			bets,
@@ -114,6 +114,7 @@ func (c *Client) StartClientLoop() {
 			log.Infof("action: apuesta_enviada | result: fail")
 		case network.ServerMessageStatusSuccess:
 			log.Infof("action: apuesta_enviada | result: success")
+			c.repository.AdvanceBatch(betsProcessed)
 		default:
 			log.Warningf("action: apuesta_enviada | result: fail | status: %v",
 				status,
