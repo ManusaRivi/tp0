@@ -10,13 +10,16 @@ Protocol definition:
 
 Data serialization:
 - Agency id: 1 byte
-- First name & Last name: 1 byte for the size of the field + N bytes for the content (max 255 bytes for the content)
-- DNI: 4 bytes (uint32)
-- Birthdate: broken down into three separate fields to minimize bytes sent.
-- Birth year: 2 bytes (uint16)
-- Birth month: 1 byte (uint8)
-- Birth day: 1 byte (uint8)
-- Bet number: 4 bytes (uint32)
+- Batch Size: 2 bytes
+Batch size is 16 bits because the max batch size is 8kB. 8 bits are not enough, and 24 bits are too much.
+- Main payload with bets:
+    - First name & Last name: 1 byte for the size of the field + N bytes for the content (max 255 bytes for the content)
+    - DNI: 4 bytes (uint32)
+    - Birthdate: broken down into three separate fields to minimize bytes sent.
+    - Birth year: 2 bytes (uint16)
+    - Birth month: 1 byte (uint8)
+    - Birth day: 1 byte (uint8)
+    - Bet number: 4 bytes (uint32)
 
 Server response:
 - Status: 1 byte (0 for failure, 1 for success)
