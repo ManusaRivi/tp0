@@ -7,7 +7,6 @@ import (
 
 	"github.com/7574-sistemas-distribuidos/docker-compose-init/client/network"
 	"github.com/7574-sistemas-distribuidos/docker-compose-init/client/repository"
-	"github.com/7574-sistemas-distribuidos/docker-compose-init/client/utils"
 	"github.com/op/go-logging"
 )
 
@@ -94,19 +93,14 @@ func (c *Client) StartClientLoop() {
 			len(bets),
 		)
 
-		utils.PrintBet(bets[0])
-
-		// TODO: Send all the bets in the batch instead of sending only one bet
-		err = network.SendBetMessage(
+		err = network.SendBetBatch(
 			c.skt,
 			uint8(agencyID),
-			bets[0],
+			bets,
 		)
 
 		if err != nil {
-			log.Errorf("action: apuesta_enviada | result: fail | dni: %v | numero: %v | error: %v",
-				bets[0].Dni,
-				bets[0].Number,
+			log.Errorf("action: apuesta_enviada | result: fail | error: %v",
 				err,
 			)
 			c.skt.Close()
@@ -117,19 +111,11 @@ func (c *Client) StartClientLoop() {
 
 		switch status {
 		case network.ServerMessageStatusFailure:
-			log.Infof("action: apuesta_enviada | result: fail | dni: %v | numero: %v",
-				bets[0].Dni,
-				bets[0].Number,
-			)
+			log.Infof("action: apuesta_enviada | result: fail")
 		case network.ServerMessageStatusSuccess:
-			log.Infof("action: apuesta_enviada | result: success | dni: %v | numero: %v",
-				bets[0].Dni,
-				bets[0].Number,
-			)
+			log.Infof("action: apuesta_enviada | result: success")
 		default:
-			log.Warningf("action: apuesta_enviada | result: fail | dni: %v | numero: %v | status: %v",
-				bets[0].Dni,
-				bets[0].Number,
+			log.Warningf("action: apuesta_enviada | result: fail | status: %v",
 				status,
 			)
 		}
