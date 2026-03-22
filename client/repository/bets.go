@@ -57,8 +57,6 @@ func (r *Repository) FetchBets(batchSize int) ([]Bet, error) {
 			return nil, err
 		}
 
-		fmt.Printf("record: %q\n", record)
-
 		dniUint, err := strconv.ParseUint(record[DNI], 10, 32)
 		if err != nil {
 			return nil, err
