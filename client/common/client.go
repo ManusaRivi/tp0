@@ -6,20 +6,12 @@ import (
 	"time"
 
 	"github.com/7574-sistemas-distribuidos/docker-compose-init/client/network"
+	"github.com/7574-sistemas-distribuidos/docker-compose-init/client/repository"
+	"github.com/7574-sistemas-distribuidos/docker-compose-init/client/utils"
 	"github.com/op/go-logging"
 )
 
 var log = logging.MustGetLogger("log")
-
-type AgencyData struct {
-	FirstName  string
-	LastName   string
-	DNI        uint32
-	BirthYear  uint16
-	BirthMonth uint8
-	BirthDay   uint8
-	Number     uint32
-}
 
 // ClientConfig Configuration used by the client
 type ClientConfig struct {
@@ -27,20 +19,22 @@ type ClientConfig struct {
 	ServerAddress string
 	LoopAmount    int
 	LoopPeriod    time.Duration
-	AgencyData    AgencyData
+	BatchAmount   int
 }
 
 // Client Entity that encapsulates how
 type Client struct {
-	config ClientConfig
-	skt    *network.Socket
+	config     ClientConfig
+	skt        *network.Socket
+	repository *repository.Repository
 }
 
 // NewClient Initializes a new client receiving the configuration
 // as a parameter
-func NewClient(config ClientConfig) *Client {
+func NewClient(config ClientConfig, repository *repository.Repository) *Client {
 	client := &Client{
-		config: config,
+		config:     config,
+		repository: repository,
 	}
 	return client
 }
@@ -64,8 +58,6 @@ func (c *Client) createClientSocket() error {
 
 // StartClientLoop Send messages to the client until some time threshold is met
 func (c *Client) StartClientLoop() {
-	agencyData := c.config.AgencyData
-
 	agencyID, err := strconv.ParseUint(c.config.ID, 10, 8)
 	if err != nil {
 		log.Errorf("action: parse_client_id | result: fail | client_id: %v | error: %v",
@@ -85,22 +77,36 @@ func (c *Client) StartClientLoop() {
 			return
 		}
 
+		bets, err := c.repository.FetchBets(c.config.BatchAmount)
+
+		if err != nil {
+			log.Errorf("action: obtener_apuestas | result: fail | client_id: %v | batch_amount: %v | error: %v",
+				c.config.ID,
+				len(bets),
+				err,
+			)
+			c.skt.Close()
+			return
+		}
+
+		log.Debugf("action: obtener_apuestas | result: success | client_id: %v | batch_amount: %v",
+			c.config.ID,
+			len(bets),
+		)
+
+		utils.PrintBet(bets[0])
+
+		// TODO: Send all the bets in the batch instead of sending only one bet
 		err = network.SendBetMessage(
 			c.skt,
 			uint8(agencyID),
-			agencyData.FirstName,
-			agencyData.LastName,
-			agencyData.DNI,
-			agencyData.BirthYear,
-			agencyData.BirthMonth,
-			agencyData.BirthDay,
-			agencyData.Number,
+			bets[0],
 		)
 
 		if err != nil {
 			log.Errorf("action: apuesta_enviada | result: fail | dni: %v | numero: %v | error: %v",
-				agencyData.DNI,
-				agencyData.Number,
+				bets[0].Dni,
+				bets[0].Number,
 				err,
 			)
 			c.skt.Close()
@@ -112,18 +118,18 @@ func (c *Client) StartClientLoop() {
 		switch status {
 		case network.ServerMessageStatusFailure:
 			log.Infof("action: apuesta_enviada | result: fail | dni: %v | numero: %v",
-				agencyData.DNI,
-				agencyData.Number,
+				bets[0].Dni,
+				bets[0].Number,
 			)
 		case network.ServerMessageStatusSuccess:
 			log.Infof("action: apuesta_enviada | result: success | dni: %v | numero: %v",
-				agencyData.DNI,
-				agencyData.Number,
+				bets[0].Dni,
+				bets[0].Number,
 			)
 		default:
 			log.Warningf("action: apuesta_enviada | result: fail | dni: %v | numero: %v | status: %v",
-				agencyData.DNI,
-				agencyData.Number,
+				bets[0].Dni,
+				bets[0].Number,
 				status,
 			)
 		}
