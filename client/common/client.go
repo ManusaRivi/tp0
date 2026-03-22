@@ -69,22 +69,24 @@ func (c *Client) StartClientLoop() {
 	// There is an autoincremental msgID to identify every message sent
 	// Messages if the message amount threshold has not been surpassed
 	for msgID := 1; msgID <= c.config.LoopAmount; msgID++ {
-		// Create the connection the server in every loop iteration. Send an
-		err := c.createClientSocket()
+		bets, isLastBatch, err := c.repository.FetchBets(c.config.BatchAmount)
 
 		if err != nil {
+			log.Errorf("action: obtener_apuestas | result: fail | client_id: %v | error: %v",
+				c.config.ID,
+				err,
+			)
 			return
 		}
 
-		bets, err := c.repository.FetchBets(c.config.BatchAmount)
+		if len(bets) == 0 {
+			log.Infof("action: loop_finished | result: success | client_id: %v", c.config.ID)
+			break
+		}
 
+		// Create the connection to the server in every loop iteration.
+		err = c.createClientSocket()
 		if err != nil {
-			log.Errorf("action: obtener_apuestas | result: fail | client_id: %v | batch_amount: %v | error: %v",
-				c.config.ID,
-				len(bets),
-				err,
-			)
-			c.skt.Close()
 			return
 		}
 
@@ -93,13 +95,13 @@ func (c *Client) StartClientLoop() {
 			len(bets),
 		)
 
-		betsProcessed, err := network.SendBetBatch(
+		sentBatch, betsProcessed, err := network.SendBetBatch(
 			c.skt,
 			uint8(agencyID),
 			bets,
 		)
 
-		if err != nil {
+		if err != nil || !sentBatch {
 			log.Errorf("action: apuesta_enviada | result: fail | error: %v",
 				err,
 			)
@@ -115,6 +117,11 @@ func (c *Client) StartClientLoop() {
 		case network.ServerMessageStatusSuccess:
 			log.Infof("action: apuesta_enviada | result: success")
 			c.repository.AdvanceBatch(betsProcessed)
+			if isLastBatch {
+				c.skt.Close()
+				log.Infof("action: loop_finished | result: success | client_id: %v", c.config.ID)
+				return
+			}
 		default:
 			log.Warningf("action: apuesta_enviada | result: fail | status: %v",
 				status,
