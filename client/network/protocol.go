@@ -3,9 +3,13 @@ package network
 import (
 	"encoding/binary"
 
+	"github.com/op/go-logging"
+
 	"github.com/7574-sistemas-distribuidos/docker-compose-init/client/repository"
 	"github.com/7574-sistemas-distribuidos/docker-compose-init/client/utils"
 )
+
+var log = logging.MustGetLogger("log")
 
 /*
 
@@ -36,6 +40,8 @@ Server response:
 // =====================
 
 const (
+	MaxBatchLength	  uint16 = 8000
+
 	BatchSizeFieldSize uint8 = 2
 	DNIFieldSize       uint8 = 4
 	BirthYearFieldSize uint8 = 2
@@ -52,64 +58,89 @@ const (
 //   Send Bet Message
 // =====================
 
-func ConvertBetsToBytes(bets []repository.Bet) ([]byte, uint16, error) {
+// Converts a slice of bets into a slice of bytes: The payload to be sent to the server.
+//
+// betsToSend keeps track of the number of bets to send (which may be less that the actual size of the bets slice),
+// So the csv pointer can be advanced accurately.
+//
+// Each bet is converted into its own byte slice (currentBetBytes) and is concatenated
+// to the whole batch byte slice (batchBytes) if it doesn't exceed the hard limit of 8kB.
+func ConvertBetsToBytes(bets []repository.Bet) ([]byte, uint16, int) {
 	var batchBytes []byte
+	betsProcessed := 0
 	for _, bet := range bets {
+		var currentBetBytes []byte
 		birthYear, birthMonth, birthDay, err := utils.ParseBirthdate(bet.Birthdate)
 		if err != nil {
-			return nil, 0, err
+			// If birthdate parsing fails, log the error and skip this specific bet,
+			// whilst incrementing betsProcessed to advance the csv pointer.
+			log.Errorf("action: parse_birthdate | result: fail | birthdate: %s | error: %v",
+				bet.Birthdate,
+				err,
+			)
+			betsProcessed++
+			continue
 		}
 
 		firstNameSize := byte(len(bet.FirstName))
 		lastNameSize := byte(len(bet.LastName))
 
-		batchBytes = append(batchBytes, firstNameSize)
-		batchBytes = append(batchBytes, []byte(bet.FirstName)...)
+		currentBetBytes = append(currentBetBytes, firstNameSize)
+		currentBetBytes = append(currentBetBytes, []byte(bet.FirstName)...)
 
-		batchBytes = append(batchBytes, lastNameSize)
-		batchBytes = append(batchBytes, []byte(bet.LastName)...)
+		currentBetBytes = append(currentBetBytes, lastNameSize)
+		currentBetBytes = append(currentBetBytes, []byte(bet.LastName)...)
 
 		dniBytes := make([]byte, DNIFieldSize)
 		binary.BigEndian.PutUint32(dniBytes, bet.Dni)
-		batchBytes = append(batchBytes, dniBytes...)
+		currentBetBytes = append(currentBetBytes, dniBytes...)
 
 		birthYearBytes := make([]byte, BirthYearFieldSize)
 		binary.BigEndian.PutUint16(birthYearBytes, birthYear)
-		batchBytes = append(batchBytes, birthYearBytes...)
+		currentBetBytes = append(currentBetBytes, birthYearBytes...)
 
-		batchBytes = append(batchBytes, birthMonth)
-		batchBytes = append(batchBytes, birthDay)
+		currentBetBytes = append(currentBetBytes, birthMonth)
+		currentBetBytes = append(currentBetBytes, birthDay)
 
 		betAmountBytes := make([]byte, BetAmountFieldSize)
 		binary.BigEndian.PutUint32(betAmountBytes, bet.Number)
-		batchBytes = append(batchBytes, betAmountBytes...)
+		currentBetBytes = append(currentBetBytes, betAmountBytes...)
+
+		// Check if adding the current bet would exceed the max batch length.
+		// If so, break the loop and send the current batch.
+		if len(batchBytes) + len(currentBetBytes) > int(MaxBatchLength) {
+			break
+		}
+		batchBytes = append(batchBytes, currentBetBytes...)
+		betsProcessed++
 	}
 
-	return batchBytes, uint16(len(batchBytes)), nil
+	return batchBytes, uint16(len(batchBytes)), betsProcessed
 }
 
-func SendBetBatch(socket *Socket, id uint8, bets []repository.Bet) error {
-	batchBytes, batchSize, err := ConvertBetsToBytes(bets)
-	if err != nil {
-		return err
+func SendBetBatch(socket *Socket, id uint8, bets []repository.Bet) (int, error) {
+	batchBytes, batchSize, betsProcessed := ConvertBetsToBytes(bets)
+
+	if batchSize == 0 {
+		return betsProcessed, nil
 	}
 
 	batchSizeBytes := make([]byte, BatchSizeFieldSize)
 	binary.BigEndian.PutUint16(batchSizeBytes, batchSize)
 
 	if err := socket.Send_all([]byte{id}); err != nil {
-		return err
+		return 0, err
 	}
 
 	if err := socket.Send_all(batchSizeBytes); err != nil {
-		return err
+		return 0, err
 	}
 
 	if err := socket.Send_all(batchBytes); err != nil {
-		return err
+		return 0, err
 	}
 
-	return nil
+	return betsProcessed, nil
 }
 
 func SendBetMessage(
