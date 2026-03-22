@@ -2,7 +2,9 @@ package repository
 
 import (
 	"encoding/csv"
+	"errors"
 	"fmt"
+	"io"
 	"os"
 	"strconv"
 )
@@ -19,6 +21,7 @@ const (
 
 type Repository struct {
 	betsPath string
+	offset   int
 }
 
 type Bet struct {
@@ -32,41 +35,56 @@ type Bet struct {
 func NewRepository(bets_path string) *Repository {
 	return &Repository{
 		betsPath: bets_path,
+		offset:   0,
 	}
 }
 
-func (r *Repository) FetchBets(batchSize int) ([]Bet, error) {
-	// For now, fetch batchSize bets from csv file.
-	// TODO: add a cursor to keep track of the last read position,
-	// and fetch the next batch of bets on each call.
+// FetchBets creates a csv reader, advances it to the current offset,
+// and reads a batch of bets. It returns the batch, a boolean indicating
+// if the end of the file was reached, and any error encountered during the process.
+func (r *Repository) FetchBets(batchSize int) ([]Bet, bool, error) {
 	betsCsv, err := os.Open(r.betsPath)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	defer betsCsv.Close()
 
 	csvReader := csv.NewReader(betsCsv)
 	csvReader.FieldsPerRecord = BetFieldsCount
 
+	for i := 0; i < r.offset; i++ {
+		_, err := csvReader.Read()
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				return []Bet{}, true, nil
+			}
+			return nil, false, err
+		}
+	}
+
 	bets := make([]Bet, 0, batchSize)
 
 	for i := 0; i < batchSize; i++ {
 		record, err := csvReader.Read()
+
 		if err != nil {
+			if errors.Is(err, io.EOF) {
+				return bets, true, nil
+			}
 			fmt.Printf("error reading csv: %v\n", err)
-			return nil, err
+			return nil, false, err
 		}
 
 		dniUint, err := strconv.ParseUint(record[DNI], 10, 32)
 		if err != nil {
-			return nil, err
+			return nil, false, err
 		}
 
 		dni32 := uint32(dniUint)
 
 		numberUint, err := strconv.ParseUint(record[Number], 10, 32)
 		if err != nil {
-			return nil, err
+			return nil, false, err
 		}
 
 		number32 := uint32(numberUint)
@@ -81,9 +99,10 @@ func (r *Repository) FetchBets(batchSize int) ([]Bet, error) {
 		bets = append(bets, bet)
 	}
 
-	return bets, nil
+	return bets, false, nil
 }
 
+// Advances the offset by the amount of bets processed.
 func (r *Repository) AdvanceBatch(betsProcessed int) {
-	
+	r.offset += betsProcessed
 }
