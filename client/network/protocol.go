@@ -40,7 +40,7 @@ Server response:
 // =====================
 
 const (
-	MaxBatchLength	  uint16 = 8000
+	MaxBatchLength uint16 = 8000
 
 	BatchSizeFieldSize uint8 = 2
 	DNIFieldSize       uint8 = 4
@@ -108,7 +108,7 @@ func ConvertBetsToBytes(bets []repository.Bet) ([]byte, uint16, int) {
 
 		// Check if adding the current bet would exceed the max batch length.
 		// If so, break the loop and send the current batch.
-		if len(batchBytes) + len(currentBetBytes) > int(MaxBatchLength) {
+		if len(batchBytes)+len(currentBetBytes) > int(MaxBatchLength) {
 			break
 		}
 		batchBytes = append(batchBytes, currentBetBytes...)
@@ -118,29 +118,39 @@ func ConvertBetsToBytes(bets []repository.Bet) ([]byte, uint16, int) {
 	return batchBytes, uint16(len(batchBytes)), betsProcessed
 }
 
-func SendBetBatch(socket *Socket, id uint8, bets []repository.Bet) (int, error) {
+// Sends a batch of bets to the server through the socket.
+//
+// First, converts the batch into bytes.
+// If batch size is 0, simply returns. Nothing is sent to the server.
+// A boolean is returned so the client avoids waiting for a server response, which would block the client.
+//
+// Sends agency id, then batch size, then batch payload.
+//
+// Returns a boolean that indicates if a batch was sent or not,
+// the number of bets processed (to increment the csv offset accordingly), any errors encountered
+func SendBetBatch(socket *Socket, id uint8, bets []repository.Bet) (bool, int, error) {
 	batchBytes, batchSize, betsProcessed := ConvertBetsToBytes(bets)
 
 	if batchSize == 0 {
-		return betsProcessed, nil
+		return false, betsProcessed, nil
 	}
 
 	batchSizeBytes := make([]byte, BatchSizeFieldSize)
 	binary.BigEndian.PutUint16(batchSizeBytes, batchSize)
 
 	if err := socket.Send_all([]byte{id}); err != nil {
-		return 0, err
+		return false, betsProcessed, err
 	}
 
 	if err := socket.Send_all(batchSizeBytes); err != nil {
-		return 0, err
+		return false, betsProcessed, err
 	}
 
 	if err := socket.Send_all(batchBytes); err != nil {
-		return 0, err
+		return false, betsProcessed, err
 	}
 
-	return betsProcessed, nil
+	return true, betsProcessed, nil
 }
 
 func SendBetMessage(
