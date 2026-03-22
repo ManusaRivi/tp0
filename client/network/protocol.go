@@ -1,6 +1,11 @@
 package network
 
-import "encoding/binary"
+import (
+	"encoding/binary"
+
+	"github.com/7574-sistemas-distribuidos/docker-compose-init/client/repository"
+	"github.com/7574-sistemas-distribuidos/docker-compose-init/client/utils"
+)
 
 /*
 
@@ -43,29 +48,29 @@ const (
 //   Send Bet Message
 // =====================
 
+// TODO: Support sending of multiple bets
 func SendBetMessage(
 	socket *Socket,
 	id uint8,
-	firstName string,
-	lastName string,
-	dni uint32,
-	birthYear uint16,
-	birthMonth uint8,
-	birthDay uint8,
-	betAmount uint32,
+	bet repository.Bet,
 ) error {
+	birthYear, birthMonth, birthDay, err := utils.ParseBirthdate(bet.Birthdate)
+	if err != nil {
+		return err
+	}
+
 	if err := socket.Send_all([]byte{id}); err != nil {
 		return err
 	}
 
-	firstNameSize := byte(len(firstName))
-	lastNameSize := byte(len(lastName))
+	firstNameSize := byte(len(bet.FirstName))
+	lastNameSize := byte(len(bet.LastName))
 
 	if err := socket.Send_all([]byte{firstNameSize}); err != nil {
 		return err
 	}
 
-	if err := socket.Send_all([]byte(firstName)); err != nil {
+	if err := socket.Send_all([]byte(bet.FirstName)); err != nil {
 		return err
 	}
 
@@ -73,12 +78,12 @@ func SendBetMessage(
 		return err
 	}
 
-	if err := socket.Send_all([]byte(lastName)); err != nil {
+	if err := socket.Send_all([]byte(bet.LastName)); err != nil {
 		return err
 	}
 
 	dniBytes := make([]byte, DNIFieldSize)
-	binary.BigEndian.PutUint32(dniBytes, dni)
+	binary.BigEndian.PutUint32(dniBytes, bet.Dni)
 
 	if err := socket.Send_all(dniBytes); err != nil {
 		return err
@@ -100,7 +105,7 @@ func SendBetMessage(
 	}
 
 	betAmountBytes := make([]byte, BetAmountFieldSize)
-	binary.BigEndian.PutUint32(betAmountBytes, betAmount)
+	binary.BigEndian.PutUint32(betAmountBytes, bet.Number)
 
 	if err := socket.Send_all(betAmountBytes); err != nil {
 		return err
