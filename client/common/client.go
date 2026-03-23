@@ -23,17 +23,19 @@ type ClientConfig struct {
 
 // Client Entity that encapsulates how
 type Client struct {
-	config     ClientConfig
-	skt        *network.Socket
-	repository *repository.Repository
+	config      ClientConfig
+	skt         *network.Socket
+	repository  *repository.Repository
+	doneLooping chan struct{}
 }
 
 // NewClient Initializes a new client receiving the configuration
 // as a parameter
-func NewClient(config ClientConfig, repository *repository.Repository) *Client {
+func NewClient(config ClientConfig, repository *repository.Repository, doneLooping chan struct{}) *Client {
 	client := &Client{
-		config:     config,
-		repository: repository,
+		config:      config,
+		repository:  repository,
+		doneLooping: doneLooping,
 	}
 	return client
 }
@@ -79,10 +81,7 @@ func (c *Client) StartClientLoop() {
 			return
 		}
 
-		if len(bets) == 0 {
-			log.Infof("action: loop_finished | result: success | client_id: %v", c.config.ID)
-			break
-		}
+		if len(bets) == 0 break
 
 		// Create the connection to the server in every loop iteration.
 		err = c.createClientSocket()
@@ -127,8 +126,7 @@ func (c *Client) StartClientLoop() {
 			c.repository.AdvanceBatch(betsProcessed)
 			if isLastBatch {
 				c.skt.Close()
-				log.Infof("action: loop_finished | result: success | client_id: %v", c.config.ID)
-				return
+				break
 			}
 		default:
 			log.Warningf("action: apuesta_enviada | result: fail | status: %v",
@@ -142,6 +140,8 @@ func (c *Client) StartClientLoop() {
 				c.config.ID,
 				err,
 			)
+			c.doneLooping <- struct{}{}
+			log.Errorf("action: loop_finished | result: fail | client_id: %v", c.config.ID)
 			return
 		}
 
@@ -150,6 +150,7 @@ func (c *Client) StartClientLoop() {
 
 	}
 	log.Infof("action: loop_finished | result: success | client_id: %v", c.config.ID)
+	c.doneLooping <- struct{}{}
 }
 
 // Close Closes the client connection.
