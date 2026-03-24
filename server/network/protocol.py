@@ -3,34 +3,52 @@ from enum import IntEnum
 from network.socket import Socket
 
 """
-
-Protocol definition:
-- Client sends Bet message to Server
-- Server responds with a Result (Sucess of Failure)
-
-Data serialization:
-- Agency id: 1 byte
-- Batch Size: 2 bytes
-Batch size is 16 bits because the max batch size is 8kB. 8 bits are not enough, and 24 bits are too much.
-- Main payload with bets:
-    - First name & Last name: 1 byte for the size of the field + N bytes for the content (max 255 bytes for the content)
-    - DNI: 4 bytes (uint32)
-    - Birthdate: broken down into three separate fields to minimize bytes sent.
-    - Birth year: 2 bytes (uint16)
-    - Birth month: 1 byte (uint8)
-    - Birth day: 1 byte (uint8)
-    - Bet number: 4 bytes (uint32)
-
-Server response:
-- Status: 1 byte (0 for failure, 1 for success)
-
+Header:
+- Message Type: 1 byte
+- Payload Length: 4 bytes (uint32, big endian)
 """
+HEADER_SIZE = 5
+PAYLOAD_LENGTH_BYTES = 4
+AGENCY_ID_BYTES = 1
+ACK_STATUS_BYTES = 1
+WINNERS_COUNT_BYTES = 4
+DNI_BYTES = 4
 
-# =====================
-#  Protocol Constants
-# =====================
+class MessageType(IntEnum):
+    BET_BATCH = 0x01
+    ACK = 0x02
+    FINISHED = 0x03
+    WINNERS_REQUEST = 0x04
+    WINNERS_RESPONSE = 0x05
 
-BATCH_SIZE_BYTES = 2
+class ServerAckStatus(IntEnum):
+	SUCCESS = 0
+	FAILURE = 1
+"""
+Payload Sizes per Message Type:
+
+Incoming messages from Client:
+
+- For BET_BATCH: variable, specified in header
+- For FINISHED: 1 byte (agency_id)
+- For WINNERS_REQUEST: 1 byte (agency_id)
+
+Outgoing messages to Client:
+- For ACK: 1 byte (success: 0, failure: 1)
+- For WINNERS_RESPONSE: variable, specified in header
+
+Payload Contents per Message Type:
+Incoming messages from Client:
+
+- For BET_BATCH: agency ID (1 byte) + a batch of bets of variable size
+- For FINISHED: agency ID (1 byte)
+- For WINNERS_REQUEST: agency ID (1 byte)
+
+Outgoing messages to Client:
+- For ACK: 1 byte (0 for failure, 1 for success)
+- For WINNERS_RESPONSE: number of winners (4 bytes) + list of winner DNIs (4 bytes each)
+If winners are not yet available, number of winners will be 0, and no DNIs will be sent.
+"""
 
 class ClientMessageFieldSize(IntEnum):
     NAME_LENGTH = 1
@@ -41,39 +59,24 @@ class ClientMessageFieldSize(IntEnum):
     BIRTH_DAY = 1
     BET_NUMBER = 4
 
+"""
+Parses a received header's data.
+Returns:
+- Message Type (so calling function can dispatch the right parsing function)
+- Agency ID (to identify the client)
+- Payload Length (to know how many bytes to read for the payload)
+"""
+def parse_header(header_bytes: bytes) -> tuple[MessageType, int]:
+    msg_type = MessageType(header_bytes[0])
+    payload_len = int.from_bytes(header_bytes[1:5], byteorder='big')
 
-class ServerMessageStatus(IntEnum):
-	FAILURE = 0
-	SUCCESS = 1
+    return msg_type, payload_len
 
-
-# =====================
-#    Send Bet Result
-# =====================
-
-
-def send_bet_result(client_sock, status: ServerMessageStatus) -> None:
-    client_sock.send(status.value.to_bytes(1, byteorder='big'))
-
-
-# =====================
-#  Receive Bet Message
-# =====================
-
-
-def recv_with_prefix(client_sock: Socket, field_name: str) -> str:
-    length_bytes = client_sock.recv_all(ClientMessageFieldSize.NAME_LENGTH)
-    length = int.from_bytes(length_bytes, byteorder='big')
-
-    raw_text = client_sock.recv_all(length)
-    text_without_padding = raw_text.rstrip(b'\x00')
-
-    try:
-        return text_without_padding.decode('utf-8')
-    except UnicodeDecodeError as error:
-        raise ValueError(f'Invalid UTF-8 encoding for {field_name}') from error
-
-
+"""
+Parses a single bet (array of bytes) and returns:
+- A tuple of the bet as a dict
+- The number of bytes read from the input.
+"""
 def parse_bet(id: int, bet_data: bytes) -> tuple[dict, int]:
     offset = 0
 
@@ -111,7 +114,9 @@ def parse_bet(id: int, bet_data: bytes) -> tuple[dict, int]:
         "number": bet_number
     }, offset
 
-
+"""
+Parses a batch of bets (array of bytes) and returns a list of bets as dicts.
+"""
 def parse_batch(id: int, batch_bytes: bytes) -> list[dict]:
     bets = []
     offset = 0
@@ -122,33 +127,49 @@ def parse_batch(id: int, batch_bytes: bytes) -> list[dict]:
         offset += bytes_read
     return bets
 
-def receive_bet_batch(client_sock: Socket) -> list[dict]:
+"""
+Receives a header, and then the payload bytes.
+Returns:
+- Message Type (so calling function can dispatch the right parsing function)
+- Agency ID (to identify the client)
+- Raw payload bytes
+"""
+def receive_message(client_sock: Socket) -> tuple[MessageType, bytes]:
     try:
-        id = int.from_bytes(client_sock.recv_all(ClientMessageFieldSize.ID), byteorder='big')
-        batch_size = int.from_bytes(client_sock.recv_all(BATCH_SIZE_BYTES), byteorder='big')
+        header_bytes = client_sock.recv_all(HEADER_SIZE)
 
-        batch_bytes = client_sock.recv_all(batch_size)
+        msg_type, payload_len = parse_header(header_bytes)
 
-        return parse_batch(id, batch_bytes)
+        # Receive agency id, only 1 byte -> taking first element of array works here
+        agency_id = client_sock.recv_all(AGENCY_ID_BYTES)[0]
+
+        # Receive the rest of the payload -> only 1 byte less that total payload length
+        payload_bytes = client_sock.recv_all(payload_len - AGENCY_ID_BYTES)
+
+        return msg_type, agency_id, payload_bytes
     except Exception as e:
-        raise ValueError(f'Error receiving bet chunk: {e}') from e
+        raise ValueError(f'Error receiving message: {e}') from e
 
+"""
+Sends ACK message to Client.
+- Status: 0 for success, 1 for failure
+- Payload Length: 4 bytes, of value 1 (payload is only one byte: the status)
+"""
+def send_ack_message(client_sock: Socket, status: ServerAckStatus) -> None:
+    header = bytes([MessageType.ACK]) + ACK_STATUS_BYTES.to_bytes(PAYLOAD_LENGTH_BYTES, byteorder='big')
+    client_sock.send_all(header)
+    client_sock.send_all(status.value.to_bytes(ACK_STATUS_BYTES, byteorder='big'))
 
-def receive_bet(client_sock: Socket):
-    id = int.from_bytes(client_sock.recv_all(ClientMessageFieldSize.ID), byteorder='big')
-    first_name = recv_with_prefix(client_sock, 'first_name')
-    last_name = recv_with_prefix(client_sock, 'last_name')
-    dni_number = int.from_bytes(client_sock.recv_all(ClientMessageFieldSize.DNI), byteorder='big')
-    birth_year = int.from_bytes(client_sock.recv_all(ClientMessageFieldSize.BIRTH_YEAR), byteorder='big')
-    birth_month = int.from_bytes(client_sock.recv_all(ClientMessageFieldSize.BIRTH_MONTH), byteorder='big')
-    birth_day = int.from_bytes(client_sock.recv_all(ClientMessageFieldSize.BIRTH_DAY), byteorder='big')
-    bet_number = int.from_bytes(client_sock.recv_all(ClientMessageFieldSize.BET_NUMBER), byteorder='big')
+"""
+Sends WINNERS_RESPONSE message to Client.
+- Payload Length: 4 bytes (number of winners) + 4 bytes per winner (DNI)
+- Payload Contents: number of winners (4 bytes) + list of winner DNIs (4 bytes each)
+"""
+def send_winners_response(client_sock: Socket, dnis: list[int]) -> None:
+    payload = len(dnis).to_bytes(WINNERS_COUNT_BYTES, byteorder='big')
+    for dni in dnis:
+        payload += dni.to_bytes(DNI_BYTES, byteorder='big')
 
-    return {
-        "id": id, 
-        "first_name": first_name,
-        "last_name": last_name,
-        "dni": dni_number,
-        "birthdate": f'{birth_year:04d}-{birth_month:02d}-{birth_day:02d}',
-        "number": bet_number
-    }
+    header = bytes([MessageType.WINNERS_RESPONSE]) + len(payload).to_bytes(PAYLOAD_LENGTH_BYTES, byteorder='big')
+    client_sock.send_all(header)
+    client_sock.send_all(payload)
