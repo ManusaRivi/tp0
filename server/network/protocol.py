@@ -165,10 +165,10 @@ Sends WINNERS_RESPONSE message to Client.
 - Payload Length: 4 bytes (number of winners) + 4 bytes per winner (DNI)
 - Payload Contents: number of winners (4 bytes) + list of winner DNIs (4 bytes each)
 """
-def send_winners_response(client_sock: Socket, dnis: list[int]) -> None:
+def send_winners_response(client_sock: Socket, dnis: list[str]) -> None:
     payload = len(dnis).to_bytes(WINNERS_COUNT_BYTES, byteorder='big')
     for dni in dnis:
-        payload += dni.to_bytes(DNI_BYTES, byteorder='big')
+        payload += int(dni).to_bytes(DNI_BYTES, byteorder='big')
 
     header = bytes([MessageType.WINNERS_RESPONSE]) + len(payload).to_bytes(PAYLOAD_LENGTH_BYTES, byteorder='big')
     client_sock.send_all(header)
