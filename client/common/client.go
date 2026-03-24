@@ -82,6 +82,7 @@ func (c *Client) sendBetBatch(agencyID uint8) error {
 
 	if len(bets) == 0 {
 		c.status = ClientStatusFinishedSendingBets
+		return nil
 	}
 
 	// Create the connection to the server in every loop iteration.
