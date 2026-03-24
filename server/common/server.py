@@ -89,7 +89,7 @@ class Server:
             elif msg_type ==  protocol.MessageType.WINNERS_REQUEST:
                 # If not all agencies finished sending bets, we cannot calculate winners, so we return empty list.
                 if not self.__all_known_agencies_finished():
-                    logging.info(f"action: consulta_ganadores | result: fail | agencia: {agency_id}")
+                    logging.info(f"action: consulta_ganadores | result: in_progress | agencia: {agency_id}")
                     protocol.send_ack_message(client_sock, protocol.ServerAckStatus.FAILURE)
                     return
                 # Check if all agencies finished sending bets.
