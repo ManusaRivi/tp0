@@ -180,7 +180,7 @@ func (c *Client) requestWinners(agencyID uint8) error {
 
 	if err := network.SendWinnersRequestMessage(c.skt, agencyID); err != nil {
 		c.skt.Close()
-		log.Errorf("action: consulta_ganadores | result: fail | client_id: %v | error: %v", agencyID, err)
+		// log.Errorf("action: consulta_ganadores | result: fail | client_id: %v | error: %v", agencyID, err)
 		return err
 	}
 
@@ -197,7 +197,6 @@ func (c *Client) requestWinners(agencyID uint8) error {
 
 		status := network.ServerAckStatus(payload[0])
 		if status == network.ServerAckStatusFailure {
-			log.Infof("action: consulta_ganadores | result: in_progress | status: still_processing_winners")
 			return nil
 		}
 

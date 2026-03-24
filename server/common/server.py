@@ -82,7 +82,7 @@ class Server:
                 protocol.send_ack_message(client_sock, protocol.ServerAckStatus.SUCCESS)
                 # Check if all agencies finished sending bets. If so, find winners and assign them to their corresponding agencies.
                 if self.__all_known_agencies_finished() and not self.winners_processed:
-                    logging.info("action: todos_envios_finalizados | result: success")
+                    logging.info("action: sorteo | result: success")
                     self.__process_winners()
                     self.winners_processed = True
 
@@ -95,7 +95,7 @@ class Server:
                 # Check if all agencies finished sending bets.
                 # Fetch winners for that agency based on agency_id
                 winners = self.winners_by_agency.get(agency_id, [])
-                logging.info(f"action: consulta_ganadores | result: success | agencia: {agency_id}")
+                # logging.info(f"action: consulta_ganadores | result: success | agencia: {agency_id}")
                 protocol.send_winners_response(client_sock, winners)
             else:
                 logging.error(f"action: mensaje_desconocido | result: fail | tipo: {msg_type}")
