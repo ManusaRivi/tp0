@@ -33,19 +33,21 @@ type ClientConfig struct {
 
 // Client Entity that encapsulates how
 type Client struct {
-	config     ClientConfig
-	skt        *network.Socket
-	repository *repository.Repository
-	status     ClientStatus
+	config      ClientConfig
+	skt         *network.Socket
+	repository  *repository.Repository
+	status      ClientStatus
+	doneLooping chan struct{}
 }
 
 // NewClient Initializes a new client receiving the configuration
 // as a parameter
-func NewClient(config ClientConfig, repository *repository.Repository) *Client {
+func NewClient(config ClientConfig, repository *repository.Repository, doneLooping chan struct{}) *Client {
 	client := &Client{
-		config:     config,
-		repository: repository,
-		status:     ClientStatusSendingBets,
+		config:      config,
+		repository:  repository,
+		status:      ClientStatusSendingBets,
+		doneLooping: doneLooping,
 	}
 	return client
 }
@@ -79,7 +81,6 @@ func (c *Client) sendBetBatch(agencyID uint8) error {
 	}
 
 	if len(bets) == 0 {
-		log.Infof("action: loop_finished | result: success | client_id: %v", c.config.ID)
 		c.status = ClientStatusFinishedSendingBets
 	}
 
@@ -230,6 +231,7 @@ func (c *Client) StartClientLoop() {
 		case ClientStatusRequestingWinners:
 			c.requestWinners(uint8(agencyID))
 		case ClientStatusFinished:
+			c.doneLooping <- struct{}{}
 			return
 		}
 
@@ -238,6 +240,7 @@ func (c *Client) StartClientLoop() {
 
 	}
 	log.Infof("action: loop_finished | result: success | client_id: %v", c.config.ID)
+	c.doneLooping <- struct{}{}
 }
 
 // Close Closes the client connection.

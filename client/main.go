@@ -123,12 +123,17 @@ func main() {
 	signalChannel := make(chan os.Signal, 1)
 	signal.Notify(signalChannel, syscall.SIGINT, syscall.SIGTERM)
 
-	client := common.NewClient(clientConfig, repository)
+	doneLooping := make(chan struct{}, 1)
+	client := common.NewClient(clientConfig, repository, doneLooping)
 	go func() {
 		client.StartClientLoop()
 	}()
 
-	sig := <-signalChannel
-	log.Infof("action: exit | result: success | signal: %v", sig)
-	client.Close()
+	select {
+	case sig := <-signalChannel:
+		log.Infof("action: exit | result: success | signal: %v", sig)
+		client.Close()
+	case <-doneLooping:
+		return
+	}
 }
