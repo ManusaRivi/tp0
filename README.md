@@ -179,3 +179,45 @@ Se proveen [pruebas automáticas](https://github.com/7574-sistemas-distribuidos/
 
 El incumplimiento de las pruebas es condición de desaprobación, pero su cumplimiento no es suficiente para la aprobación.  Se pide a los alumnos leer atentamente y **tener en cuenta** los criterios de corrección informados  [en el campus](https://campusgrado.fi.uba.ar/mod/page/view.php?id=73393).
 Respetar el formato y contenido las entradas de logs descritas en los ejercicios, pues son las que se chequean en cada uno de los tests.
+
+## Resolución
+
+### Ejercicio 1:
+
+El script de bash `generar-compose.sh` llama al script de python `generador.py`.
+
+Para correr el script de bash, se debe ejecutar:
+
+```sh
+bash generar-compose.sh <archivo_de_salida> <cantidad_de_clientes>
+```
+
+El script de python usa el paquete `pyyaml` para crear el docker compose, y el resultado es escrito por salida estandar usando `yaml.dump`. Por lo tanto, el script de bash redirige la salida estandard al archivo cuyo nombre recibe como argumento.
+
+### Ejercicio 2:
+
+Usando `docker volumes`, se modifica `generador.py` para que los contenedores reciban los archivos de configuracion como volumenes de docker:
+
+En el contenedor del server:
+```py
+'volumes': ['./server/config.ini:/config.ini']
+```
+
+En el contenedor del cliente:
+```py
+'volumes': ['./client/config.yaml:/config.yaml'],
+```
+
+Gracias a esto, los archivos en la maquina host (`./server/config.ini` y `./client/config.yaml`) son inyectados en los contenedores: en el server, el path es `/config.ini`, y en el cliente el path es `/config.yaml`.
+
+### Ejercicio 3
+
+Para correr el script, ejecutar:
+
+```sh
+sh validar-echo-server.sh
+```
+
+Este script crea un Dockerfile a partir de la imagen Alpine de Linux (por lo liviana que es), e instala `netcat` dentro de la imagen.
+
+Luego, el script lanza el contenedor, lo conecta a la misma `docker network` del servidor, y ejecuta `nc -N server 12345`, con `Test` en stdin. Verifica luego que el resultado sea `Test`.
