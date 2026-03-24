@@ -44,21 +44,37 @@ class Server:
         """
 
         try:
-            bets = protocol.receive_bet_batch(client_sock)
-            utils.store_bets([utils.Bet(
-                agency=bet['id'],
-                first_name=bet['first_name'],
-                last_name=bet['last_name'],
-                document=str(bet['dni']),
-                birthdate=bet['birthdate'],
-                number=str(bet['number']))
-                for bet in bets
-            ])
-            logging.info(f"action: apuesta_recibida | result: success | cantidad: {len(bets)}")
-            protocol.send_bet_result(client_sock, protocol.ServerMessageStatus.SUCCESS)
+            msg_type, agency_id, payload_bytes = protocol.receive_message(client_sock)
+            if msg_type == protocol.MessageType.BET_BATCH:
+                bets = protocol.parse_batch(agency_id, payload_bytes)
+                utils.store_bets([utils.Bet(
+                    agency=bet['id'],
+                    first_name=bet['first_name'],
+                    last_name=bet['last_name'],
+                    document=str(bet['dni']),
+                    birthdate=bet['birthdate'],
+                    number=str(bet['number']))
+                    for bet in bets
+                ])
+                logging.info(f"action: apuesta_recibida | result: success | cantidad: {len(bets)}")
+                protocol.send_ack_message(client_sock, protocol.ServerAckStatus.SUCCESS)
+            elif msg_type == protocol.MessageType.FINISHED:
+                # Mark agency as finished, so when all agencies are finished, we can calculate winners
+                logging.info(f"action: envio_finalizado | result: success | agencia: {agency_id}")
+                protocol.send_ack_message(client_sock, protocol.ServerAckStatus.SUCCESS)
+            elif msg_type ==  protocol.MessageType.WINNERS_REQUEST:
+                # Check if all agencies finished sending bets.
+                # Fetch winners for that agency based on agency_id
+                winners = [1, 2, 3]
+                logging.info(f"action: consulta_ganadores | result: success | agencia: {agency_id}")
+                protocol.send_winners_response(client_sock, winners)
+            else:
+                logging.error(f"action: mensaje_desconocido | result: fail | tipo: {msg_type}")
+                protocol.send_ack_message(client_sock, protocol.ServerAckStatus.FAILURE)
+
         except OSError as e:
             logging.error(f"action: apuesta_recibida | result: fail | cantidad: {len(bets)}")
-            protocol.send_bet_result(client_sock, protocol.ServerMessageStatus.FAILURE)
+            protocol.send_ack_message(client_sock, protocol.ServerAckStatus.FAILURE)
         finally:
             client_sock.close()
 
