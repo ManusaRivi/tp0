@@ -268,8 +268,8 @@ func ReceiveAck(socket *Socket) (ServerAckStatus, error) {
 
 /*
 Parses the payload corresponding to a WINNERS_RESPONSE message.
-- If winners are not yet available, winners count will be 0.
-- Otherwise, count is > 0 and each DNI is 4 bytes.
+- winners count may be 0 when the agency has no winners.
+- otherwise, count is > 0 and each DNI is 4 bytes.
 */
 func ParseWinnersResponsePayload(payload []byte) ([]uint32, error) {
 	if len(payload) < WinnersCountBytes {
@@ -286,7 +286,7 @@ func ParseWinnersResponsePayload(payload []byte) ([]uint32, error) {
 		)
 	}
 
-	// If count is 0, winners are not yet available, return empty slice so client retries
+	// If count is 0, agency has no winners.
 	if count == 0 {
 		return []uint32{}, nil
 	}

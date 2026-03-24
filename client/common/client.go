@@ -189,6 +189,20 @@ func (c *Client) requestWinners(agencyID uint8) error {
 		return err
 	}
 
+	if msgType == network.MessageTypeAck {
+		if len(payload) != 1 {
+			return fmt.Errorf("invalid ACK payload length for winners request: %d", len(payload))
+		}
+
+		status := network.ServerAckStatus(payload[0])
+		if status == network.ServerAckStatusFailure {
+			log.Infof("action: consulta_ganadores | result: fail | status: still_processing_winners")
+			return nil
+		}
+
+		return fmt.Errorf("unexpected ACK status for winners request: %d", status)
+	}
+
 	if msgType != network.MessageTypeWinnersResp {
 		return fmt.Errorf("unexpected message type for winners response: %d", msgType)
 	}
@@ -198,13 +212,9 @@ func (c *Client) requestWinners(agencyID uint8) error {
 		return err
 	}
 
-	if len(dnis) == 0 {
-		log.Infof("action: consulta_ganadores | result: fail | status: still_processing_winners")
-		return nil
-	}
-
 	c.status = ClientStatusFinished
 	log.Infof("action: consulta_ganadores | result: success | cant_ganadores: %d", len(dnis))
+	c.doneLooping <- struct{}{}
 	return nil
 }
 
