@@ -4,6 +4,8 @@ from network import protocol
 from network.socket import Socket
 from common import utils
 
+MAX_AGENCIES = 5
+
 class Server:
     def __init__(self, port, listen_backlog):
         # Initialize server socket
@@ -11,6 +13,8 @@ class Server:
         self._server_socket.bind(('', port))
         self._server_socket.listen(listen_backlog)
         self.stopped = False
+        self.finished_agencies = set()
+        self.winners_by_agency: dict[list] = {}
 
     def run(self):
         """
@@ -34,6 +38,13 @@ class Server:
         self.stopped = True
         self._server_socket.close()
         logging.info("action: shutdown_server | result: success")
+
+    def __process_winners(self):
+        for bet in utils.load_bets():
+            if utils.has_won(bet):
+                if not bet.agency in self.winners_by_agency:
+                    self.winners_by_agency[bet.agency] = []
+                self.winners_by_agency[bet.agency].append(bet.document)
 
     def __handle_client_connection(self, client_sock: Socket):
         """
@@ -61,11 +72,22 @@ class Server:
             elif msg_type == protocol.MessageType.FINISHED:
                 # Mark agency as finished, so when all agencies are finished, we can calculate winners
                 logging.info(f"action: envio_finalizado | result: success | agencia: {agency_id}")
+                self.finished_agencies.add(agency_id)
                 protocol.send_ack_message(client_sock, protocol.ServerAckStatus.SUCCESS)
+                if self.finished_agencies == set(range(1, MAX_AGENCIES + 1)):
+                    logging.info("action: todos_envios_finalizados | result: success")
+                    self.__process_winners()
+
             elif msg_type ==  protocol.MessageType.WINNERS_REQUEST:
+                # If not all agencies finished sending bets, we cannot calculate winners, so we return empty list.
+                # TODO: add new ACK status for "In progress"
+                if len(self.finished_agencies) < MAX_AGENCIES:
+                    logging.info(f"action: consulta_ganadores | result: fail | agencia: {agency_id}")
+                    protocol.send_winners_response(client_sock, [])
+                    return
                 # Check if all agencies finished sending bets.
                 # Fetch winners for that agency based on agency_id
-                winners = [1, 2, 3]
+                winners = self.winners_by_agency[agency_id]
                 logging.info(f"action: consulta_ganadores | result: success | agencia: {agency_id}")
                 protocol.send_winners_response(client_sock, winners)
             else:
