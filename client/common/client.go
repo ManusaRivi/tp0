@@ -81,7 +81,9 @@ func (c *Client) StartClientLoop() {
 			return
 		}
 
-		if len(bets) == 0 break
+		if len(bets) == 0 {
+			break
+		}
 
 		// Create the connection to the server in every loop iteration.
 		err = c.createClientSocket()
@@ -124,16 +126,16 @@ func (c *Client) StartClientLoop() {
 		case network.ServerMessageStatusSuccess:
 			log.Infof("action: apuesta_enviada | result: success")
 			c.repository.AdvanceBatch(betsProcessed)
-			if isLastBatch {
-				c.skt.Close()
-				break
-			}
 		default:
 			log.Warningf("action: apuesta_enviada | result: fail | status: %v",
 				status,
 			)
 		}
 		c.skt.Close()
+
+		if isLastBatch {
+			break
+		}
 
 		if err != nil {
 			log.Errorf("action: receive_message | result: fail | client_id: %v | error: %v",
