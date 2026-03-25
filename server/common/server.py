@@ -1,5 +1,6 @@
 import socket
 import logging
+import threading
 from network import protocol
 from network.socket import Socket
 from common import utils
@@ -15,6 +16,10 @@ class Server:
         self.known_agencies = set()
         self.winners_processed = False
         self.winners_by_agency: dict[list] = {}
+        self._state_lock = threading.Lock()
+        self._storage_lock = threading.Lock()
+        self._worker_threads = []
+        self._worker_threads_lock = threading.Lock()
 
     def run(self):
         """
@@ -27,8 +32,11 @@ class Server:
 
         while not self.stopped:
             client_sock = self.__accept_new_connection()
-            if not self.stopped or client_sock is not None:
-                self.__handle_client_connection(client_sock)
+            if client_sock is None:
+                continue
+            self.__start_client_worker(client_sock)
+
+        self.__join_worker_threads()
     
     def stop(self):
         """
@@ -40,15 +48,40 @@ class Server:
         logging.info("action: shutdown_server | result: success")
 
     def __process_winners(self):
-        self.winners_by_agency = {}
-        for bet in utils.load_bets():
-            if utils.has_won(bet):
-                if not bet.agency in self.winners_by_agency:
-                    self.winners_by_agency[bet.agency] = []
-                self.winners_by_agency[bet.agency].append(bet.document)
+        winners_by_agency = {}
+        with self._storage_lock:
+            for bet in utils.load_bets():
+                if utils.has_won(bet):
+                    if bet.agency not in winners_by_agency:
+                        winners_by_agency[bet.agency] = []
+                    winners_by_agency[bet.agency].append(bet.document)
+
+        with self._state_lock:
+            self.winners_by_agency = winners_by_agency
+            self.winners_processed = True
 
     def __all_known_agencies_finished(self):
         return len(self.known_agencies) > 0 and self.known_agencies.issubset(self.finished_agencies)
+
+    def __start_client_worker(self, client_sock: Socket):
+        worker = threading.Thread(target=self.__handle_client_connection, args=(client_sock,))
+        with self._worker_threads_lock:
+            self._worker_threads.append(worker)
+        worker.start()
+
+    def __join_worker_threads(self):
+        while True:
+            with self._worker_threads_lock:
+                workers = list(self._worker_threads)
+            if not workers:
+                break
+            for worker in workers:
+                worker.join()
+
+    def __mark_worker_finished(self):
+        current_worker = threading.current_thread()
+        with self._worker_threads_lock:
+            self._worker_threads = [w for w in self._worker_threads if w is not current_worker]
 
     def __handle_client_connection(self, client_sock: Socket):
         """
@@ -62,9 +95,12 @@ class Server:
             msg_type, agency_id, payload_bytes = protocol.receive_message(client_sock)
             if msg_type == protocol.MessageType.BET_BATCH:
                 bets = protocol.parse_batch(agency_id, payload_bytes)
-                self.known_agencies.add(agency_id)
-                self.winners_processed = False
-                utils.store_bets([utils.Bet(
+                with self._state_lock:
+                    self.known_agencies.add(agency_id)
+                    self.winners_processed = False
+
+                with self._storage_lock:
+                    utils.store_bets([utils.Bet(
                     agency=bet['id'],
                     first_name=bet['first_name'],
                     last_name=bet['last_name'],
@@ -72,40 +108,51 @@ class Server:
                     birthdate=bet['birthdate'],
                     number=str(bet['number']))
                     for bet in bets
-                ])
+                    ])
                 logging.info(f"action: apuesta_recibida | result: success | cantidad: {len(bets)}")
                 protocol.send_ack_message(client_sock, protocol.ServerAckStatus.SUCCESS)
             elif msg_type == protocol.MessageType.FINISHED:
                 # Mark agency as finished, so when all agencies are finished, we can calculate winners
                 logging.info(f"action: envio_finalizado | result: success | agencia: {agency_id}")
-                self.finished_agencies.add(agency_id)
+                should_process_winners = False
+                with self._state_lock:
+                    self.finished_agencies.add(agency_id)
+                    if self.__all_known_agencies_finished() and not self.winners_processed:
+                        should_process_winners = True
                 protocol.send_ack_message(client_sock, protocol.ServerAckStatus.SUCCESS)
                 # Check if all agencies finished sending bets. If so, find winners and assign them to their corresponding agencies.
-                if self.__all_known_agencies_finished() and not self.winners_processed:
+                if should_process_winners:
                     logging.info("action: sorteo | result: success")
                     self.__process_winners()
-                    self.winners_processed = True
 
             elif msg_type ==  protocol.MessageType.WINNERS_REQUEST:
                 # If not all agencies finished sending bets, we cannot calculate winners, so we return empty list.
-                if not self.__all_known_agencies_finished():
+                with self._state_lock:
+                    all_finished = self.__all_known_agencies_finished()
+                    winners_ready = self.winners_processed
+                    winners = self.winners_by_agency.get(agency_id, [])
+
+                if not all_finished or not winners_ready:
                     logging.info(f"action: consulta_ganadores | result: in_progress | agencia: {agency_id}")
                     protocol.send_ack_message(client_sock, protocol.ServerAckStatus.FAILURE)
                     return
                 # Check if all agencies finished sending bets.
                 # Fetch winners for that agency based on agency_id
-                winners = self.winners_by_agency.get(agency_id, [])
                 # logging.info(f"action: consulta_ganadores | result: success | agencia: {agency_id}")
                 protocol.send_winners_response(client_sock, winners)
             else:
                 logging.error(f"action: mensaje_desconocido | result: fail | tipo: {msg_type}")
                 protocol.send_ack_message(client_sock, protocol.ServerAckStatus.FAILURE)
 
-        except OSError as e:
-            logging.error(f"action: apuesta_recibida | result: fail | cantidad: {len(bets)}")
-            protocol.send_ack_message(client_sock, protocol.ServerAckStatus.FAILURE)
+        except Exception as e:
+            logging.error(f"action: handle_client_connection | result: fail | error: {e}")
+            try:
+                protocol.send_ack_message(client_sock, protocol.ServerAckStatus.FAILURE)
+            except Exception:
+                pass
         finally:
             client_sock.close()
+            self.__mark_worker_finished()
 
     def __accept_new_connection(self):
         """
