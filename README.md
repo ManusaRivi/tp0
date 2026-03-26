@@ -233,3 +233,76 @@ Para terminar el servidor de forma graceful, se implementa la clase `ShutdownHan
 Para el cliente se crea un `channel` de `os.Signal`, y con el metodo `Notify`, nos aseguramos que las señales `SIGTERM` y `SIGINT` se retransmitan al canal.
 
 Luego, el cliente se ejecuta en una goroutine separada, para que el thread principal escuche en ese canal y llame a `client.Close()` al recibir una señal. Ese metodo cierra la conexion que tiene el cliente con el servidor.
+
+### Ejercicio 5
+
+Se implementaron abstracciones de socket tanto para el servidor como para el cliente, con metodos `recv_all` y `send_all` que evitan short reads y short writes.
+
+#### Protocolo Inicial:
+
+El protocolo en esta instancia es muy basico: el servidor envia una apuesta y el servidor responde con el resultado de la operacion.
+Estructura de la apuesta:
+| Campo | Bytes |
+| ----- | ----- |
+| ID de la agencia | 1 |
+| Nombre/Apellido | 1 para el size + N bytes |
+| DNI | 4 |
+| Año de nacimiento | 2 |
+| Mes de nacimiento | 1 |
+| Día de nacimiento | 1 |
+| Número | 4 |
+
+Los datos para las apuestas son importados como variables de entorno. Se modificó `generador.py` para que agregue estos archivos como campos `env_file` dentro de cada contenedor.
+
+### Ejercicio 6
+
+#### Protocolo Actualizado:
+
+Modificaciones al protocolo: el cliente envia el id de la agencia (1 byte), luego el tamaño del batch de apuestas, y luego el batch. Las bets son convertidas a bytes antes de ser enviadas por socket. 
+
+El cliente implementa la funcion `FetchBets` que trae un batch del almacenamiento. Llamados contiguos implican batches contiguos. Al enviarlos al servidor, verifica que el payload (cantidad de bytes total de las apuestas) no supere los 8kB.
+
+El servidor almacena estas apuestas llamando a `utils.store_bets`.
+
+El servidor responde con un byte: o exito o fracaso.
+
+### Ejercicio 7
+
+Para este ejercicio, se tuvo que var una vuelta de tuerca al protocolo para que soporte mas de un tipo de mensaje, y las logicas de tanto el servor como el client.
+
+El encabezado consta de un byte para el tipo de mensaje, y luego 4 bytes para el largo. Los payloads son armados como arreglos de bytes en el protocolo y luego enviados directamente por socket en un solo mensaje.
+
+Los tipos de mensaje son:
+
+| Nombre | Origen | Destino |
+| ------ | ------ | ------- |
+| BET_BATCH | Cliente | Servior |
+| FINISHED | Cliente | Servidor |
+| WINNERS_REQUEST | Cliente | Servidor |
+| ACK | Servidor | Cliente |
+| WINNERS_RESPONSE | Servidor | Cliente |
+
+Los payloads de los mensajes del cliente al servidor tienen siempre el id de la agencia como primer byte, ACK tiene un byte para representar exito/fallo.
+Finished, winners request y ACK no tienen mas payload aparte de eso.
+
+La WINNERS_RESPONSE contiene un byte para determinar la cantidad de ganadores, y luego 4 bytes para cada numero de cada ganador.
+
+El servidor recibe un mensaje, parsea el encabezado y en funcion del tipo de mensaje decide que logica ejecutar.
+
+El cliente loopea y cada vez que ocurre un evento que cambia su comportamiento (enviar el ultimo batch de apuestas, recibir el ACK del finished y obtener los ganadores) cambia su estado a otro. El estado dicta en que etapa del proceso se encuentra ese cliente.
+
+
+
+### Ejercicio 8
+
+Mecanismo de concurrencia: modulo `threading` de python.
+
+En cada nuev correccion, se lanza un hilo nuevo. El hilo handlea la conexion con un cliente nuevo.
+
+Mecanismos de sincronizacion en el servidor:
+
+`state_lock`: bloquea cuando se realizan operaciones sobre el estado general del servidor: preguntar si todas las agencias terminaron de mandar apuesas, marcar una como finalizada...
+
+`storage_lock`: bloquea cuando se almacenan apuestas o cuando se cargan del storage para sortear los ganadores.
+
+`worker_therads`: Para evitar condiciones de carrera a la hora de agregar worker threads, unirlos y marcarlos como terminados.
