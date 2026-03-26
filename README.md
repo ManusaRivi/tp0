@@ -221,3 +221,15 @@ sh validar-echo-server.sh
 Este script crea un Dockerfile a partir de la imagen Alpine de Linux (por lo liviana que es), e instala `netcat` dentro de la imagen.
 
 Luego, el script lanza el contenedor, lo conecta a la misma `docker network` del servidor, y ejecuta `nc -N server 12345`, con `Test` en stdin. Verifica luego que el resultado sea `Test`.
+
+### Ejercicio 4
+
+#### Servidor:
+
+Para terminar el servidor de forma graceful, se implementa la clase `ShutdownHandler`, que se encarga de manejar las señales `SIGTERM` y `SIGINT` llamando al metodo `stop()` de `Server`. Este metodo cierra el socket aceptador y rompe el server loop.
+
+#### Cliente:
+
+Para el cliente se crea un `channel` de `os.Signal`, y con el metodo `Notify`, nos aseguramos que las señales `SIGTERM` y `SIGINT` se retransmitan al canal.
+
+Luego, el cliente se ejecuta en una goroutine separada, para que el thread principal escuche en ese canal y llame a `client.Close()` al recibir una señal. Ese metodo cierra la conexion que tiene el cliente con el servidor.
