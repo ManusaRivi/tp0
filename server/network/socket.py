@@ -10,7 +10,12 @@ class Socket:
         return 0 if sz <= 0 else sz
     
     def send_all(self, data: bytes):
-        self.sock.sendall(data)
+        sent = 0
+        while sent < len(data):
+            sz = self.sock.send(data[sent:])
+            if sz == 0:
+                raise ConnectionError('Connection closed while sending data')
+            sent += sz
 
     def recv_all(self, size: int) -> bytes:
         data = bytearray()
